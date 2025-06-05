@@ -11,8 +11,7 @@ A powerful Retrieval-Augmented Generation (RAG) application that processes both 
   - PDF text extraction with page level metadata
   - Video transcription with timestamp segmentation
 - **AI-Powered Q&A**:
-  - Query documents using state-of-the-art LLMs via OpenRouter
-  - Supports multiple models (Claude, GPT, deepseek.)
+  - Query documents using Deepseek
 - **Interactive Interface**:
   - Streamlit-based web UI
   - Document preview with text selection
