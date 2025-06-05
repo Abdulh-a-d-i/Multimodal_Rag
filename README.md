@@ -1,6 +1,7 @@
 # Multimodal RAG Application
 
-![image](https://github.com/user-attachments/assets/62a2f2f3-0813-4217-b469-fe427e987f3e)
+![image](https://github.com/user-attachments/assets/230264b1-ffa2-4762-84e3-b46987f56975)
+
 
 A powerful Retrieval-Augmented Generation (RAG) application that processes both PDF documents and video files, then answers questions using the OpenRouter API with various AI models.
 
