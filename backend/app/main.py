@@ -11,12 +11,7 @@ from moviepy.editor import VideoFileClip
 import speech_recognition as sr
 from tempfile import NamedTemporaryFile
 from datetime import datetime
-# Replace the embedding function import with:
-from app.services.embedding import DeepSeekEmbeddingFunction
-import requests as http_requests
-from typing import List, Dict
-
-
+import requests
 
 app = FastAPI()
 
@@ -24,13 +19,14 @@ app = FastAPI()
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Initialize ChromaDB
+# Initialize ChromaDB with DeepSeek embeddings
 client = chromadb.PersistentClient(path="chroma_db")
-deepseek_ef = DeepSeekEmbeddingFunction(api_key="sk-4997e1a23a8f4a74ba35e0c870908193")
+deepseek_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="deepseek-ai/deepseek-embedding")
 collection = client.get_or_create_collection(
     name="multimodal_rag",
     embedding_function=deepseek_ef
 )
+
 class Query(BaseModel):
     question: str
 
@@ -42,17 +38,19 @@ class VideoResponse(BaseModel):
     text: str
     metadata: dict
 
+# DeepSeek API Config
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")  # Set your API key in environment variables
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+
 @app.post("/upload/pdf/")
 async def upload_pdf(file: UploadFile = File(...)):
     try:
-        # Save the uploaded file
         file_id = str(uuid.uuid4())
         file_path = os.path.join(UPLOAD_FOLDER, f"{file_id}.pdf")
         
         with open(file_path, "wb") as f:
             f.write(await file.read())
         
-        # Process PDF
         with open(file_path, "rb") as f:
             pdf_reader = PyPDF2.PdfReader(f)
             documents = []
@@ -87,39 +85,32 @@ async def upload_pdf(file: UploadFile = File(...)):
 @app.post("/upload/video/")
 async def upload_video(file: UploadFile = File(...)):
     try:
-        # Save the uploaded file
         file_id = str(uuid.uuid4())
         file_path = os.path.join(UPLOAD_FOLDER, f"{file_id}.mp4")
         
         with open(file_path, "wb") as f:
             f.write(await file.read())
         
-        # Extract audio from video
         video = VideoFileClip(file_path)
         audio = video.audio
         
-        # Save audio to temporary file
         with NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
             audio_path = temp_audio.name
             audio.write_audiofile(audio_path, codec='pcm_s16le')
         
-        # Transcribe audio
         recognizer = sr.Recognizer()
         with sr.AudioFile(audio_path) as source:
             audio_data = recognizer.record(source)
             try:
-                text = recognizer.recognize_google(audio_data)  # Free option
+                text = recognizer.recognize_google(audio_data)
             except sr.UnknownValueError:
                 text = ""
         
-        # Clean up
         os.unlink(audio_path)
         video.close()
         
         if text:
-            # Split into chunks (simplified - in production you'd want better segmentation)
             chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
-            
             documents = []
             metadatas = []
             ids = []
@@ -129,7 +120,7 @@ async def upload_video(file: UploadFile = File(...)):
                 documents.append(chunk)
                 metadatas.append({
                     "source": file.filename,
-                    "timestamp": f"{i * 10}:00",  # Simplified timestamp
+                    "timestamp": f"{i * 10}:00",
                     "type": "video",
                     "file_id": file_id
                 })
@@ -149,13 +140,11 @@ async def upload_video(file: UploadFile = File(...)):
 @app.post("/query/")
 async def query_rag(query: Query):
     try:
-        # Retrieve relevant documents
         results = collection.query(
             query_texts=[query.question],
             n_results=5
         )
         
-        # Prepare context for LLM
         context = ""
         sources = []
         
@@ -179,7 +168,6 @@ async def query_rag(query: Query):
                     "content": doc[:200] + "..."
                 })
         
-        # Get real response from DeepSeek
         answer = get_deepseek_response(query.question, context)
         
         return {
@@ -189,33 +177,26 @@ async def query_rag(query: Query):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-        
+
 def get_deepseek_response(question: str, context: str) -> str:
-    """
-    Get response from DeepSeek API
-    """
-    api_url = "https://api.deepseek.com/v1/chat/completions"  # Verify the actual endpoint
+    """Get response directly from DeepSeek API"""
     headers = {
-        "Authorization": "sk-4997e1a23a8f4a74ba35e0c870908193",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json"
     }
     
     prompt = f"""
-    You are an AI assistant answering questions based on provided context.
-    Always cite your sources using the provided metadata.
+    Answer based on this context (cite sources exactly as shown):
     
-    Context:
     {context}
     
     Question: {question}
-    
-    Answer in detail with proper citations:
     """
     
     data = {
-        "model": "deepseek-chat",  # Verify the correct model name
+        "model": "deepseek-chat",
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant that answers questions based on provided documents."},
+            {"role": "system", "content": "You are a helpful assistant that provides detailed answers with citations."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
@@ -223,13 +204,11 @@ def get_deepseek_response(question: str, context: str) -> str:
     }
     
     try:
-        response = http_requests.post(api_url, headers=headers, json=data)
+        response = requests.post(DEEPSEEK_API_URL, headers=headers, json=data)
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"Error calling DeepSeek API: {str(e)}")
-        return f"Sorry, I couldn't process your question. Error: {str(e)}"
-    
+        return f"Error: {str(e)}"
 
 @app.get("/status/")
 async def status():
