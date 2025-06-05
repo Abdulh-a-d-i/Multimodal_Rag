@@ -1,26 +1,20 @@
-# Virtual environments
-venv/
-env/
-
-# Python cache
-__pycache__/
-*.py[cod]
-
-
-# Environment & credentials
+# .gitignore
 .env
-
-# Jupyter checkpoints
-.ipynb_checkpoints/
-
-# Model files and large binaries
-*.pth
-*.pt
-*.onnx
-*.bin
-*.dll
-*.lib
-*.exe
-
-# HuggingFace model folders (customize based on your structure)
-backend/models/
+**/.env
+**/__pycache__/
+**/*.pyc
+**/*.pyd
+**/*.so
+**/*.dll
+**/*.lib
+**/*.exe
+**/*.bin
+**/*.sqlite3
+**/*.pdf
+**/*.mp4
+**/*.wav
+**/venv/
+**/temp_media/
+**/uploads/
+**/models/
+**/chroma_db/
